@@ -4,16 +4,17 @@ import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.quarkus.logging.Log;
 import io.quarkus.scheduler.Scheduled;
+import io.smallrye.mutiny.Uni;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.MDC;
+import software.amazon.awssdk.services.sqs.SqsAsyncClient;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.DeleteMessageRequest;
-import software.amazon.awssdk.services.sqs.model.Message;
+import software.amazon.awssdk.services.sqs.model.ReceiveMessageResponse;
 import software.amazon.awssdk.services.sqs.model.SendMessageResponse;
 
 import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
-import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -22,14 +23,24 @@ public class SqsSendReceive {
     @Inject
     SqsClient sqs;
 
-    @ConfigProperty(name = "queue.url")
+    @Inject
+    SqsAsyncClient sqsAsync;
+
+    @ConfigProperty(name = "sqs.queue.url")
     String queueUrl;
+
+    @ConfigProperty(name = "sqs.client.async")
+    Boolean async;
+
 
     @Scheduled(every = "3s", identity = "send-job")
     public void send(){
         MDC.put("traceId", Span.current().getSpanContext().getTraceId());
         MDC.put("spanId", Span.current().getSpanContext().getSpanId());
+        if(async) sendAsync(); else sendSync();
+    }
 
+    private void sendSync() {
         SendMessageResponse response = sqs.sendMessage(m -> m
                 .queueUrl(queueUrl)
                 .messageBody("message" + UUID.randomUUID())
@@ -38,14 +49,29 @@ public class SqsSendReceive {
         Log.info("message sent\t\tID=%s".formatted(response.messageId()));
     }
 
+    private void sendAsync() {
+        Uni.createFrom()
+                .completionStage(sqsAsync.sendMessage(m -> m
+                        .queueUrl(queueUrl)
+                        .messageBody("message" + UUID.randomUUID())
+                        .messageGroupId("a"))
+                )
+                .onItem().transform(SendMessageResponse::messageId)
+                .onItem().invoke(messageId -> Log.info("message sent\t\tID=%s".formatted(messageId)))
+                .subscribe().with(ignord -> {})
+        ;
+    }
+
     @Scheduled(every = "2s", identity = "receive-job")
     public void receive(){
         MDC.put("traceId", Span.current().getSpanContext().getTraceId());
         MDC.put("spanId", Span.current().getSpanContext().getSpanId());
+        if(async) receiveAsync(); else receiveSync();
+        postReceive();
+    }
 
-        List<Message> messages = sqs.receiveMessage(m -> m.maxNumberOfMessages(1).queueUrl(queueUrl)).messages();
-
-        messages.forEach(m -> {
+    private void receiveSync() {
+        sqs.receiveMessage(m -> m.maxNumberOfMessages(1).queueUrl(queueUrl)).messages().forEach(m -> {
             Log.info("message received\tID=%s".formatted(m.messageId()));
             Log.info("message system attributes: %s".formatted(m.attributes().entrySet()
                     .stream()
@@ -53,8 +79,22 @@ public class SqsSendReceive {
                     .collect(Collectors.joining(", "))));
             sqs.deleteMessage(DeleteMessageRequest.builder().queueUrl(queueUrl).receiptHandle(m.receiptHandle()).build());
         });
+    }
 
-        postReceive();
+    private void receiveAsync() {
+        Uni.createFrom()
+                .completionStage(sqsAsync.receiveMessage(m -> m.maxNumberOfMessages(1).queueUrl(queueUrl)))
+                .onItem().transform(ReceiveMessageResponse::messages)
+                .onItem().invoke(msgList -> msgList.forEach(m -> {
+                    Log.info("message received\tID=%s".formatted(m.messageId()));
+                    Log.info("message system attributes: %s".formatted(m.attributes().entrySet()
+                            .stream()
+                            .map(e -> e.getKey() + "=\"" + e.getValue() + "\"")
+                            .collect(Collectors.joining(", "))));
+                    //FIXME not instrumented by otel agent -> no span created in trace
+                    sqsAsync.deleteMessage(DeleteMessageRequest.builder().queueUrl(queueUrl).receiptHandle(m.receiptHandle()).build());
+                }))
+                .subscribe().with(ignord -> {});
     }
 
     @WithSpan("postReceive")
