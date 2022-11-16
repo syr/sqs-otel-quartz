@@ -74,6 +74,9 @@ public class SqsSendReceive {
 
     private void receiveSync() {
         sqs.receiveMessage(m -> m.maxNumberOfMessages(1).queueUrl(queueUrl)).messages().forEach(m -> {
+            //FIXME How to get MDCs updated in a less cumbersome/invasive way?
+            MDC.put("traceId", Span.current().getSpanContext().getTraceId());
+            MDC.put("spanId", Span.current().getSpanContext().getSpanId());
             Log.info("message received\tID=%s".formatted(m.messageId()));
             Log.info("message system attributes: %s".formatted(m.attributes().entrySet()
                     .stream()
