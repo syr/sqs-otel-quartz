@@ -35,6 +35,7 @@ public class SqsSendReceive {
 
     @Scheduled(every = "3s", identity = "send-job")
     public void send(){
+        //FIXME How to get MDCs updated in a less cumbersome/invasive way?
         MDC.put("traceId", Span.current().getSpanContext().getTraceId());
         MDC.put("spanId", Span.current().getSpanContext().getSpanId());
         if(async) sendAsync(); else sendSync();
@@ -64,6 +65,7 @@ public class SqsSendReceive {
 
     @Scheduled(every = "2s", identity = "receive-job")
     public void receive(){
+        //FIXME How to get MDCs updated in a less cumbersome/invasive way?
         MDC.put("traceId", Span.current().getSpanContext().getTraceId());
         MDC.put("spanId", Span.current().getSpanContext().getSpanId());
         if(async) receiveAsync(); else receiveSync();
@@ -99,6 +101,7 @@ public class SqsSendReceive {
 
     @WithSpan("postReceive")
     public void postReceive(){
+        //FIXME How to get MDCs updated in a less cumbersome/invasive way?
         MDC.put("traceId", Span.current().getSpanContext().getTraceId());
         MDC.put("spanId", Span.current().getSpanContext().getSpanId());
         Log.info("postReceive");
