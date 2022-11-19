@@ -44,18 +44,18 @@ public class SqsSendReceive {
     @Scheduled(every = "3s", identity = "send-job")
     public void send(){
         //FIXME How to get MDCs updated in a less cumbersome/invasive way?
-        MDC.put("traceId", Span.current().getSpanContext().getTraceId());
-        MDC.put("spanId", Span.current().getSpanContext().getSpanId());
+        updateMDC();
+        Log.info("send-job scheduled");
         if(async) sendAsync(); else sendSync();
     }
 
     private void sendSync() {
         SpanContext spanContext = Span.current().getSpanContext();
-        String traceId = spanContext.getTraceId();
-        String spanId = spanContext.getSpanId();
         Map<String, MessageAttributeValue> messageAttributes = Map.of(
-                TRACE_ID_KEY, MessageAttributeValue.builder().dataType("String").stringValue(traceId).build(),
-                SPAN_ID_KEY, MessageAttributeValue.builder().dataType("String").stringValue(spanId).build()
+                TRACE_ID_KEY, MessageAttributeValue.builder().dataType("String")
+                        .stringValue(spanContext.getTraceId()).build(),
+                SPAN_ID_KEY, MessageAttributeValue.builder().dataType("String")
+                        .stringValue(spanContext.getSpanId()).build()
         );
 
         SendMessageResponse response = sqs.sendMessage(m -> m
@@ -63,6 +63,7 @@ public class SqsSendReceive {
                 .messageBody("message" + UUID.randomUUID())
                 .messageAttributes(messageAttributes)
         );
+        updateMDC();
         Log.info("message sent\t\tID=%s".formatted(response.messageId()));
     }
 
@@ -81,48 +82,49 @@ public class SqsSendReceive {
 
     @Scheduled(every = "2s", identity = "receive-job")
     public void receive(){
-        //FIXME How to get MDCs updated in a less cumbersome/invasive way?
-        MDC.put("traceId", Span.current().getSpanContext().getTraceId());
-        MDC.put("spanId", Span.current().getSpanContext().getSpanId());
+        updateMDC();
+        Log.info("receive-job scheduled");
         if(async) receiveAsync(); else receiveSync();
-        postReceive(); //with the traceId from this method we can see the original Sqs.ReceiveMessage span
+        postReceive(); //resulting span is added to the trace created by quartz instrumentation of receive job
+        // with the traceId from this method we can see the original Sqs.ReceiveMessage span
     }
 
     private void receiveSync() {
-        sqs.receiveMessage(m -> m
+        ReceiveMessageResponse response = sqs.receiveMessage(m -> m
                 .maxNumberOfMessages(1)
                 .queueUrl(queueUrl)
                 .messageAttributeNames(TRACE_ID_KEY, SPAN_ID_KEY)
-        ).messages().forEach(m -> {
+        );
+
+        response.messages().forEach(m -> {
             String traceId = m.messageAttributes().get(TRACE_ID_KEY).stringValue();
             String spanId = m.messageAttributes().get(SPAN_ID_KEY).stringValue();
 
             //restore remote trace
             Span span = createSpanLinkedToParent(traceId, spanId);
             try (Scope scope = span.makeCurrent()) {
-                //FIXME How to get MDCs updated in a less cumbersome/invasive way?
-                MDC.put("traceId", Span.current().getSpanContext().getTraceId());
-                MDC.put("spanId", Span.current().getSpanContext().getSpanId());
+                updateMDC();
                 Log.info("message received\tID=%s".formatted(m.messageId()));
-                Log.info("message system attributes: %s".formatted(m.attributes().entrySet()
-                        .stream()
-                        .map(e -> e.getKey() + "=\"" + e.getValue() + "\"")
-                        .collect(Collectors.joining(", "))));
 
                 deleteMessage(m);
-                postReceive();
+//                postReceive();
             } finally {
                 span.end();
             }
+            postReceive(); //resulting span is added to the trace created by quartz instrumentation
         });
+    }
+
+    private static void updateMDC() {
+        MDC.put("traceId", Span.current().getSpanContext().getTraceId());
+        MDC.put("spanId", Span.current().getSpanContext().getSpanId());
     }
 
     @WithSpan("deleteMessage")
     private void deleteMessage(Message m) {
-        //FIXME How to get MDCs updated in a less cumbersome/invasive way?
-        MDC.put("traceId", Span.current().getSpanContext().getTraceId());
-        MDC.put("spanId", Span.current().getSpanContext().getSpanId());
         sqs.deleteMessage(DeleteMessageRequest.builder().queueUrl(queueUrl).receiptHandle(m.receiptHandle()).build());
+        updateMDC();
+        Log.info("message deleted\tID=%s".formatted(m.messageId()));
     }
 
     private static Span createSpanLinkedToParent(String traceId, String spanId) {
@@ -157,9 +159,7 @@ public class SqsSendReceive {
 
     @WithSpan("postReceive")
     public void postReceive(){
-        //FIXME How to get MDCs updated in a less cumbersome/invasive way?
-        MDC.put("traceId", Span.current().getSpanContext().getTraceId());
-        MDC.put("spanId", Span.current().getSpanContext().getSpanId());
+        updateMDC();
         Log.info("postReceive");
     }
 }

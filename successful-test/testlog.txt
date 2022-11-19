@@ -1,0 +1,7 @@
+15:17:05 INFO  traceId=27ba01bee174eaa4d01b4fc1b140657a spanId=b8ebc4143529adae [or.ac.qu.SqsSendReceive] (vert.x-worker-thread-1) send-job scheduled
+15:17:05 INFO  traceId=27ba01bee174eaa4d01b4fc1b140657a spanId=b8ebc4143529adae [or.ac.qu.SqsSendReceive] (vert.x-worker-thread-1) message sent		ID=224febc1-a9b0-4e6a-851c-10086506dcf2
+15:17:06 INFO  traceId=70b6e146e780353f9e20d7cbfeaf1543 spanId=12202d099d7b1b45 [or.ac.qu.SqsSendReceive] (vert.x-worker-thread-1) receive-job scheduled
+15:17:06 INFO  traceId=27ba01bee174eaa4d01b4fc1b140657a spanId=352e9b984e9c0c1a [or.ac.qu.SqsSendReceive] (vert.x-worker-thread-1) message received	ID=224febc1-a9b0-4e6a-851c-10086506dcf2
+15:17:06 INFO  traceId=27ba01bee174eaa4d01b4fc1b140657a spanId=c78e269ae5f40760 [or.ac.qu.SqsSendReceive] (vert.x-worker-thread-1) message deleted	ID=224febc1-a9b0-4e6a-851c-10086506dcf2
+15:17:06 INFO  traceId=70b6e146e780353f9e20d7cbfeaf1543 spanId=ca356c0c21db948c [or.ac.qu.SqsSendReceive] (vert.x-worker-thread-1) postReceive
+15:17:06 INFO  traceId=70b6e146e780353f9e20d7cbfeaf1543 spanId=203aacb1f4cd1ae0 [or.ac.qu.SqsSendReceive] (vert.x-worker-thread-1) postReceive
