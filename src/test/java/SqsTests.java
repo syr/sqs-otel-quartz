@@ -4,10 +4,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.junit.jupiter.api.Test;
 import software.amazon.awssdk.services.sqs.SqsAsyncClient;
 import software.amazon.awssdk.services.sqs.SqsClient;
-import software.amazon.awssdk.services.sqs.model.DeleteMessageRequest;
-import software.amazon.awssdk.services.sqs.model.SendMessageBatchRequest;
-import software.amazon.awssdk.services.sqs.model.SendMessageBatchRequestEntry;
-import software.amazon.awssdk.services.sqs.model.SendMessageResponse;
+import software.amazon.awssdk.services.sqs.model.*;
 
 import javax.inject.Inject;
 import java.util.ArrayList;
@@ -36,10 +33,14 @@ public class SqsTests {
 
 
         // Prepare messages to send
+
+        // messageGroupId will be only relevant if multiple 10-messages-batches are actually processed in parallel threads
+        String messageGroup = "a";
+
         List<SendMessageBatchRequestEntry> entries = new ArrayList<>();
         for (int i = 0; i < 100; i++) {
             var id = UUID.randomUUID().toString();
-            entries.add(SendMessageBatchRequestEntry.builder().messageBody("message" + id).messageGroupId("a").id(id).build());
+            entries.add(SendMessageBatchRequestEntry.builder().messageBody("message" + id).messageGroupId(messageGroup).id(id).build());
 
             if(entries.size() == 10){
                 Long startSend = System.currentTimeMillis();
@@ -47,6 +48,7 @@ public class SqsTests {
                 sqs.sendMessageBatch(request);
                 Log.info("%d messages sent in: %d ms".formatted(entries.size(), System.currentTimeMillis()-startSend));
                 entries.clear();
+                messageGroup += "a";
             }
         }
 //        sent 100 messages in 974 ms (test-perfo.fifo)
@@ -57,13 +59,24 @@ public class SqsTests {
     @Test
     void testReceive() {
         Long start = System.currentTimeMillis();
+        int waitTimeSeconds = 0;
 
         while (true) {
-            sqs.receiveMessage(m -> m.maxNumberOfMessages(10).queueUrl(queueUrl)).messages().forEach(m -> {
-                Log.info("message received:\tID=%s".formatted(m.messageId()));
+            int finalWaitTimeSeconds = waitTimeSeconds;
+            List<Message> messageList = sqs.receiveMessage(m -> m.maxNumberOfMessages(10).waitTimeSeconds(finalWaitTimeSeconds).messageAttributeNames("MessageGroupId").queueUrl(queueUrl)).messages();
+            Log.info("Received %d messages".formatted(messageList.size()));
+            if (messageList.isEmpty()) {
+                Log.info("no further messages were received. Switching to long polling");
+                waitTimeSeconds = 3;
+//                Log.info("all messages were received. Terminating.");
+//                break;
+            }
+            messageList.forEach(m -> {
+                Log.info("message received:\tID=%s for messageGroupId %s".formatted(m.messageId(),m.messageAttributes().get("MessageGroupId")));
                 Log.info("message body:\t%s".formatted(m.toString()));
-                sqs.deleteMessage(DeleteMessageRequest.builder().queueUrl(queueUrl).receiptHandle(m.receiptHandle()).build());
+//                sqs.deleteMessage(DeleteMessageRequest.builder().queueUrl(queueUrl).receiptHandle(m.receiptHandle()).build());
             });
+
         }
 //        received 100 message in 5s (test-perfo.fifo)
 //        received 100 message in 5s (test.fifo)
