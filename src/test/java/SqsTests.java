@@ -82,4 +82,54 @@ public class SqsTests {
 //        received 100 message in 5s (test.fifo)
 //        Log.info("Receive finished in: %d ms".formatted(System.currentTimeMillis()-start));
     }
+
+
+    @Test
+    void testSendAndReceive() {
+        sqs.sendMessage(m -> m.queueUrl(queueUrl).messageBody("message1").messageGroupId("a"));
+        sqs.sendMessage(m -> m.queueUrl(queueUrl).messageBody("message2").messageGroupId("a"));
+
+        List<Message> messageList = sqs.receiveMessage(m -> m.maxNumberOfMessages(1).queueUrl(queueUrl)).messages();
+        //from here, message1 changes from 'available' to 'in-flight'
+        //before visibilityTimeout(30s), sqs.receiveMessage returns no further message of the same messageGroup
+        //after visibilityTimeout(30s),
+        //  - message1 changes from 'in-flight' to 'available'
+        //  - sqs.receiveMessage return message1 again
+        Log.info("Received %d messages".formatted(messageList.size()));
+        Log.info("message body:\t%s".formatted(messageList.get(0).toString()));
+
+//        sqs.deleteMessage(DeleteMessageRequest.builder().queueUrl(queueUrl).receiptHandle(messageList.get(0).receiptHandle()).build());
+        //ONLY after deleting message1, sqs.receiveMessage will return message2
+        List<Message> messageList2 = sqs.receiveMessage(m -> m.maxNumberOfMessages(1).queueUrl(queueUrl)).messages();
+        Log.info("Received %d messages".formatted(messageList.size()));
+        Log.info("message body:\t%s".formatted(messageList.get(0).toString()));
+    }
+
+    @Test
+    void testSendAndReceiveMessageGroup() {
+        sqs.sendMessage(m -> m.queueUrl(queueUrl).messageBody("message1").messageGroupId("a"));
+        sqs.sendMessage(m -> m.queueUrl(queueUrl).messageBody("message2").messageGroupId("b"));
+
+        List<Message> messageList = sqs.receiveMessage(m -> m.maxNumberOfMessages(1).queueUrl(queueUrl)).messages();
+        Log.info("Received %d messages".formatted(messageList.size()));
+        Log.info("message body:\t%s".formatted(messageList.get(0).toString()));
+
+        List<Message> messageList2 = sqs.receiveMessage(m -> m.maxNumberOfMessages(1).queueUrl(queueUrl)).messages();
+        Log.info("Received %d messages".formatted(messageList2.size()));
+        Log.info("message body:\t%s".formatted(messageList2.get(0).toString()));
+    }
+
+    @Test
+    void testSendAndReceiveMessageGroupIdentical() {
+        sqs.sendMessage(m -> m.queueUrl(queueUrl).messageBody("message1").messageGroupId("a"));
+        sqs.sendMessage(m -> m.queueUrl(queueUrl).messageBody("message2").messageGroupId("a"));
+
+        List<Message> messageList = sqs.receiveMessage(m -> m.maxNumberOfMessages(1).queueUrl(queueUrl)).messages();
+        Log.info("Received %d messages".formatted(messageList.size()));
+        Log.info("message body:\t%s".formatted(messageList.get(0).toString()));
+
+        List<Message> messageList2 = sqs.receiveMessage(m -> m.maxNumberOfMessages(1).queueUrl(queueUrl)).messages();
+        Log.info("Received %d messages".formatted(messageList2.size()));
+        Log.info("message body:\t%s".formatted(messageList2.get(0).toString()));
+    }
 }
