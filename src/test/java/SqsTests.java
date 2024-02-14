@@ -132,4 +132,23 @@ public class SqsTests {
         Log.info("Received %d messages".formatted(messageList2.size()));
         Log.info("message body:\t%s".formatted(messageList2.get(0).toString()));
     }
+
+    @Test
+    void testSendAndReceiveMessageGroupIdenticalBatched() {
+        sqs.sendMessage(m -> m.queueUrl(queueUrl).messageBody("message1").messageGroupId("a"));
+        sqs.sendMessage(m -> m.queueUrl(queueUrl).messageBody("message2").messageGroupId("a"));
+
+        List<Message> messageList = sqs.receiveMessage(m -> m.maxNumberOfMessages(2).queueUrl(queueUrl)).messages();
+        Log.info("Received %d messages".formatted(messageList.size()));
+        Log.info("message1 body:\t%s".formatted(messageList.get(0).toString()));
+        Log.info("message2 body:\t%s".formatted(messageList.get(1).toString()));
+
+        //simulate that only second message was successfully processed and thus deleted
+        sqs.deleteMessage(DeleteMessageRequest.builder().queueUrl(queueUrl).receiptHandle(messageList.get(1).receiptHandle()).build());
+
+        List<Message> messageList2 = sqs.receiveMessage(m -> m.maxNumberOfMessages(1).queueUrl(queueUrl)).messages();
+        //sqs.receiveMessage returns message1: on batch receive, fail on first error, don't continue with next message or order will not be preserved
+        Log.info("Received %d messages".formatted(messageList2.size()));
+        Log.info("message body:\t%s".formatted(messageList2.get(0).toString()));
+    }
 }
