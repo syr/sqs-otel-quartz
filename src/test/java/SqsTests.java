@@ -1,6 +1,8 @@
 import io.quarkus.logging.Log;
 import io.quarkus.test.junit.QuarkusTest;
+import org.awaitility.Awaitility;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import software.amazon.awssdk.services.sqs.SqsAsyncClient;
 import software.amazon.awssdk.services.sqs.SqsClient;
@@ -10,8 +12,10 @@ import javax.inject.Inject;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 @QuarkusTest
 public class SqsTests {
@@ -23,6 +27,48 @@ public class SqsTests {
 
     @ConfigProperty(name = "sqs.queue.url")
     String queueUrl;
+
+
+
+    @Test
+    void testSendAsync() throws ExecutionException, InterruptedException {
+        Long start = System.currentTimeMillis();
+        SendMessageResponse response = sqsAsync.sendMessage(m -> m
+                .queueUrl(queueUrl)
+                .messageBody("message" + UUID.randomUUID())
+                .messageGroupId("a")
+        ).get();
+        Log.info("all messages sent in: %d ms".formatted(System.currentTimeMillis()-start));
+    }
+
+    @Test
+    void testReceiveAsync() {
+        Long start = System.currentTimeMillis();
+        sqsAsync.receiveMessage(m -> m.maxNumberOfMessages(1).queueUrl(queueUrl))
+                .thenApplyAsync(SqsTests::apply);
+        Log.info("all messages received in: %d ms".formatted(System.currentTimeMillis()-start));
+
+        // Wait for the asynchronous method to complete within a timeout
+        Awaitility.await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
+            // Add assertions here to verify the result of the asynchronous method
+            // For example, you can check if a flag indicating completion is set
+            // assertTrue(myAsyncService.isAsyncMethodCompleted());
+            Assertions.assertTrue(finished);
+        });
+    }
+
+    private static boolean finished = false;
+
+    private static Object apply(ReceiveMessageResponse response) {
+        Log.info("received %d message:".formatted(response.messages().size()));
+        response.messages().forEach(m -> {
+            Log.info("message received:\tID=%s for messageGroupId %s".formatted(m.messageId(),m.messageAttributes().get("MessageGroupId")));
+            Log.info("message body:\t%s".formatted(m.toString()));
+        });
+        finished=true;
+        return null;
+    }
+
 
     @Test
     void testSend() {

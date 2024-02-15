@@ -1,7 +1,6 @@
 package org.acme.quartz;
 
 import io.quarkus.logging.Log;
-import io.quarkus.scheduler.Scheduled;
 import io.smallrye.mutiny.Uni;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import software.amazon.awssdk.services.sqs.SqsAsyncClient;
@@ -30,7 +29,6 @@ public class SqsSendReceive {
     Boolean async;
 
 
-    @Scheduled(every = "3s", identity = "send-job")
     public void send(){
         //FIXME How to get MDCs updated in a less cumbersome/invasive way?
         if(async) sendAsync(); else sendSync();
@@ -58,7 +56,6 @@ public class SqsSendReceive {
         ;
     }
 
-    @Scheduled(every = "2s", identity = "receive-job")
     public void receive(){
         //FIXME How to get MDCs updated in a less cumbersome/invasive way?
         if(async) receiveAsync(); else receiveSync();
