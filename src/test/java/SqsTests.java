@@ -10,6 +10,8 @@ import javax.inject.Inject;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @QuarkusTest
 public class SqsTests {
@@ -150,5 +152,26 @@ public class SqsTests {
         //sqs.receiveMessage returns message1: on batch receive, fail on first error, don't continue with next message or order will not be preserved
         Log.info("Received %d messages".formatted(messageList2.size()));
         Log.info("message body:\t%s".formatted(messageList2.get(0).toString()));
+    }
+
+
+    @Test
+    void dummyTest(){
+        Log.info("in dummy test");
+        testWorker();
+        Log.info("test worker scheduled, working in background");
+    }
+
+    void testWorker() {
+        final ExecutorService executor = Executors.newFixedThreadPool(5);
+            executor.submit(() -> {
+                Log.info("in test worker now");
+                try {
+                    Thread.sleep(10000);
+                    Log.info("test worker finished");
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            });
     }
 }

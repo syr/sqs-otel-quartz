@@ -1,12 +1,9 @@
 package org.acme.quartz;
 
-import io.opentelemetry.api.trace.Span;
-import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.quarkus.logging.Log;
 import io.quarkus.scheduler.Scheduled;
 import io.smallrye.mutiny.Uni;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
-import org.jboss.logging.MDC;
 import software.amazon.awssdk.services.sqs.SqsAsyncClient;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.DeleteMessageRequest;
@@ -36,8 +33,6 @@ public class SqsSendReceive {
     @Scheduled(every = "3s", identity = "send-job")
     public void send(){
         //FIXME How to get MDCs updated in a less cumbersome/invasive way?
-        MDC.put("traceId", Span.current().getSpanContext().getTraceId());
-        MDC.put("spanId", Span.current().getSpanContext().getSpanId());
         if(async) sendAsync(); else sendSync();
     }
 
@@ -66,8 +61,6 @@ public class SqsSendReceive {
     @Scheduled(every = "2s", identity = "receive-job")
     public void receive(){
         //FIXME How to get MDCs updated in a less cumbersome/invasive way?
-        MDC.put("traceId", Span.current().getSpanContext().getTraceId());
-        MDC.put("spanId", Span.current().getSpanContext().getSpanId());
         if(async) receiveAsync(); else receiveSync();
         postReceive();
     }
@@ -75,8 +68,6 @@ public class SqsSendReceive {
     private void receiveSync() {
         sqs.receiveMessage(m -> m.maxNumberOfMessages(1).queueUrl(queueUrl)).messages().forEach(m -> {
             //FIXME How to get MDCs updated in a less cumbersome/invasive way?
-            MDC.put("traceId", Span.current().getSpanContext().getTraceId());
-            MDC.put("spanId", Span.current().getSpanContext().getSpanId());
             Log.info("message received\tID=%s".formatted(m.messageId()));
             Log.info("message system attributes: %s".formatted(m.attributes().entrySet()
                     .stream()
@@ -102,11 +93,8 @@ public class SqsSendReceive {
                 .subscribe().with(ignord -> {});
     }
 
-    @WithSpan("postReceive")
     public void postReceive(){
         //FIXME How to get MDCs updated in a less cumbersome/invasive way?
-        MDC.put("traceId", Span.current().getSpanContext().getTraceId());
-        MDC.put("spanId", Span.current().getSpanContext().getSpanId());
         Log.info("postReceive");
     }
 }
